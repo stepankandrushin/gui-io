@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- build.sh installs this as ~/Library/LaunchAgents/<bundle id>.plist, the label and home filled in. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key><string>@LABEL@</string>
+	<key>ProgramArguments</key><array><string>@HOME@/Applications/GuiIO.app/Contents/MacOS/gui-io</string></array>
+	<key>AssociatedBundleIdentifiers</key><array><string>@LABEL@</string></array>
+	<key>RunAtLoad</key><true/>
+	<key>KeepAlive</key><true/>
+	<key>LimitLoadToSessionType</key><string>Aqua</string>
+	<key>ProcessType</key><string>Interactive</string>
+	<key>StandardOutPath</key><string>@HOME@/Library/Logs/gui-io.log</string>
+	<key>StandardErrorPath</key><string>@HOME@/Library/Logs/gui-io.log</string>
+</dict>
+</plist>

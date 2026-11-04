@@ -1,0 +1,117 @@
+#!/bin/zsh -f
+# gui — see and drive this Mac's screen through GuiIO.app from any shell, SSH included.
+#
+#   gui shot [N]                       wake the display and print screen.jpg's path (screen-N.jpg: display N)
+#   gui click X Y [left|right|middle] [COUNT]
+#   gui move X Y    gui down X Y [BUTTON]    gui up X Y [BUTTON]    gui drag X1 Y1 X2 Y2 [BUTTON]
+#   gui scroll DX DY [X Y]             in lines; DY > 0 scrolls down
+#   gui type TEXT                      any Unicode, whatever the input source; a newline presses return
+#   gui key COMBO...                   cmd+shift+4, return, esc, f5, cmd+a delete
+#   gui zoom X Y W H                   full-resolution crop to zoom.png; prints its path
+#   gui settle                         wait until the screen stops changing (250 ms, at most 3 s), print the path
+#   gui display N                      make display N the one coordinates refer to
+#   gui status                         grants, displays, version
+#   gui raw 'LINE'                     send one command line as it is and print its ack
+#
+# ~/.local/state/gui-io/screen.jpg is a named pipe: reading it (cat, an agent's Read) returns the screen as
+# it is at that moment; iv shows it; scp and other image viewers cannot open a pipe, so `cat` it into a file.
+# Coordinates are its pixels. After an input command gui waits for the screen to settle and prints the path;
+# -n first skips the settle and prints the ack. GUI_TIMEOUT (seconds, default 10) bounds the wait for an
+# ack; GUI_VERBOSE=1 prints each ack and its time on stderr.
+# Exit 1 for an err ack, 2 for a timeout, 3 when GuiIO is not running.
+# Doc: README.md, https://github.com/stepankandrushin/gui-io
+emulate zsh
+export LC_ALL=en_US.UTF-8  # ${s[i,j]} below counts characters, not bytes
+zmodload zsh/system zsh/zselect zsh/datetime zsh/stat || exit 3
+dir=${GUI_IO_DIR:-$HOME/.local/state/gui-io}
+umask 077
+
+self=${0:A}  # inside a function $0 is the function's name
+usage() { sed -n '2,/^# Doc/p' $self | sed 's/^# \{0,1\}//' >&2; exit ${1:-1} }
+
+settle=1
+[[ ${1-} == -n ]] && { settle=0; shift }
+(( $# )) || usage
+cmd=$1; shift
+idbase=g$$r$RANDOM
+n=0
+lines=() ids=()
+add() { ids+=($idbase.$((++n))); lines+=("$ids[-1] $*") }
+
+case $cmd in
+  shot|settle|status|display|zoom) add $cmd "$@" ;;
+  move|click|down|up|drag|scroll|key) add $cmd "$@" ;;
+  type)
+    text="$*"
+    parts=("${(@ps:\n:)text}")
+    for (( i = 1; i <= $#parts; i++ )); do
+      p=$parts[i]
+      while [[ -n $p ]]; do  # 100 characters are at most 400 bytes: each line stays one atomic FIFO write
+        add type "${p[1,100]}"
+        p=${p[101,-1]}
+      done
+      (( i < $#parts )) && add key return
+    done
+    (( $#lines )) || add type ''
+    ;;
+  raw) (( $# == 1 )) || usage; add "$1" ;;
+  -h|--help|help) usage 0 ;;
+  *) print -u2 "gui: unknown command $cmd"; usage ;;
+esac
+input=0
+[[ $cmd == (move|click|down|up|drag|scroll|key|type) ]] && input=1
+(( input && settle )) && add settle
+
+out=$dir/out
+[[ -e $out ]] || : >> $out
+zstat -A sz +size $out
+start=$sz[1]
+if ! sysopen -w -o nonblock -u wfd $dir/in 2>/dev/null; then
+  id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' $HOME/Applications/GuiIO.app/Contents/Info.plist 2>/dev/null)
+  print -u2 "gui: GuiIO is not running (nobody reads $dir/in): launchctl kickstart gui/$UID/${id:-<GuiIO's bundle id>}"
+  exit 3
+fi
+t0=$EPOCHREALTIME
+for l in $lines; do
+  syswrite -o $wfd -- "$l"$'\n' || { print -u2 "gui: cannot write to $dir/in"; exit 3 }
+done
+exec {wfd}>&-
+
+timeout=$(( ${GUI_TIMEOUT:-10} + $#lines * 0.05 ))
+sysopen -r -u rfd $out
+sysseek -u $rfd $start
+buf= last=
+typeset -A acks
+while (( $#acks < $#ids )); do
+  zstat -A sz +size $out
+  (( sz[1] < systell(rfd) )) && sysseek -u $rfd 0  # truncated by GuiIO
+  while sysread -i $rfd -s 65536 chunk; do buf+=$chunk; done
+  while [[ $buf == *$'\n'* ]]; do
+    line=${buf%%$'\n'*}; buf=${buf#*$'\n'}
+    lid=${line%% *}
+    if (( ${ids[(Ie)$lid]} )); then
+      acks[$lid]=${line#* }
+      [[ -n ${GUI_VERBOSE-} ]] && printf 'gui: %s (%.0f ms)\n' "$line" $(( (EPOCHREALTIME - t0) * 1000 )) >&2
+    fi
+  done
+  (( $#acks == $#ids )) && break
+  if (( EPOCHREALTIME - t0 > timeout )); then
+    print -u2 "gui: no ack from GuiIO within ${timeout}s for: ${(j:; :)lines}"
+    exit 2
+  fi
+  zselect -t 1
+done
+
+rc=0
+for id in $ids; do
+  a=$acks[$id]
+  if [[ $a == err* ]]; then print -u2 "gui: ${a#err }"; rc=1; fi
+  last=$a
+done
+(( rc )) && exit 1
+path_of() { local a=" $1 "; [[ $a == *" path="* ]] && { a=${a#* path=}; print -r -- ${a%% *}; } }
+case $cmd in
+  shot|settle|zoom) path_of "$last" ;;
+  status|display|raw) print -r -- "$last" ;;
+  *) if (( settle )); then path_of "$last"; else print -r -- "$last"; fi ;;
+esac
