@@ -77,7 +77,8 @@ clock or the moving cursor doesn't hold it up, but a window, a menu or a page ap
 
 - macOS 14 or later, in a logged-in user session (a LaunchAgent runs in the user's GUI session,
   so no one logged in means no screen). Tested on Apple silicon, with macOS 27.
-- The Xcode Command Line Tools (`xcode-select --install`), for `swiftc`.
+- The Xcode Command Line Tools (`xcode-select --install`), for `swiftc`. Xcode itself, if
+  installed, also compiles the app icon (see Files).
 - A code-signing identity. TCC ties both grants to the bundle id *and* the signing certificate,
   so every build has to be signed with the same one. An "Apple Development" certificate works,
   and a free Apple ID gets one in Xcode (Settings → Accounts → Manage Certificates → +). If you
@@ -334,9 +335,10 @@ tccutil reset All $id
 
 - `gui-io.swift`: the daemon, in one file (ScreenCaptureKit, CGEvent, ImageIO).
 - `Info.plist`: the bundle, with LSUIElement set, so there is no Dock icon and no menu.
-- `icon/`: `icon.py` draws the app icon into `AppIcon.iconset` (pycairo and Pillow), which `build.sh`
-  turns into `AppIcon.icns` with `iconutil`: a display folded like a page, a shell prompt and the
-  pointer, so the Screen Recording and Accessibility lists show what is asking.
+- `icon/`: `icon.py` draws the app icon into `Assets.xcassets` (pycairo and Pillow): a display folded
+  like a page, a shell prompt and the pointer, so the Screen Recording and Accessibility lists show
+  what is asking. `build.sh` compiles it with Xcode's `actool`. Without Xcode it makes a plain
+  `.icns`, which macOS 26 and later show on a gray tile at the small sizes those lists use.
 - `launchagent.plist`: the LaunchAgent template (RunAtLoad, KeepAlive, Aqua session).
 - `build.sh`: builds, signs, installs and (re)starts the app, and installs the client.
 - `gui`: the client, a zsh script.

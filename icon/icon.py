@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""Draws GuiIO's app icon and writes AppIcon.iconset next to this file (build.sh makes the .icns).
+"""Draws GuiIO's app icon into Assets.xcassets next to this file; build.sh compiles it.
 
 A display whose corner is folded like a page (the screen is a file), a shell prompt on it and the
 pointer over it: a terminal sees the screen and drives it. The body follows macOS's app icon grid,
-an 824 px continuous-corner square on a 1024 px canvas with room for its shadow, so macOS 26 and
-later show it as it is instead of shrinking it onto a gray tile.
+an 824 px continuous-corner square on a 1024 px canvas with room for its shadow.
+
+macOS 26 and later shrink an icon onto a gray tile when they do not take it for one of theirs. On
+macOS 26.6 and 27.0 a plain .icns passes at 64 px and up but is tiled at 32 and 16 px, whatever
+the drawing; an asset catalog (Assets.car, compiled by Xcode's actool) passes at 32 px as well, and
+at 16 px once the square fills 15 of the 16 pixels, without margin or shadow.
 
     python3 icon/icon.py        # needs pycairo and Pillow (Debian: python3-cairo python3-pil)
 """
-import math, os
+import json, math, os
 import cairo
 from PIL import Image, ImageFilter
 
@@ -190,22 +194,41 @@ def file_monitor(x, y, w, h, fold, screen_fill, bezel=26):
     return compose([img, (flap, (9, 7, 0.45, -6))]), (sx, sy, sw, sh)
 
 
-def icon():
+def icon(shadow=True):
     bg = background('#5E8DFF', '#2B3BD1')
     mon, (sx, sy, sw, sh) = file_monitor(192, 226, 640, 440, 136, dark_screen)
     pr = prompt(sx + 46, sy + 50, 104, width=30)
     pt = pointer(sx + 300, sy + 128, 330)
-    return compose([(bg, (12, 10, 0.35)), (mon, (18, 12, 0.35)), pr, (pt, (10, 10, 0.45))])
+    return compose([(bg, (12, 10, 0.35) if shadow else None), (mon, (18, 12, 0.35)), pr, (pt, (10, 10, 0.45))])
+
+
+def filled(img, fill, px):
+    """img scaled to px with the 824 px body filling that fraction of it"""
+    m = round((824 / fill - 824) / 2)
+    pad = Image.new('RGBA', (S + 2 * m, S + 2 * m), (0, 0, 0, 0))
+    pad.paste(img, (m, m))
+    return pad.crop((100, 100, 100 + 824 + 2 * m, 100 + 824 + 2 * m)).resize((px, px), Image.LANCZOS)
 
 
 if __name__ == '__main__':
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'AppIcon.iconset')
+    xcassets = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Assets.xcassets')
+    out = os.path.join(xcassets, 'AppIcon.appiconset')
     os.makedirs(out, exist_ok=True)
-    big = icon()
+    info = {'info': {'version': 1, 'author': 'xcode'}}
+    with open(os.path.join(xcassets, 'Contents.json'), 'w') as f:
+        json.dump(info, f, indent=2)
+    big, flat = icon(), icon(shadow=False)
+    images = []
     for size in (16, 32, 128, 256, 512):
         for scale in (1, 2):
             px = size * scale
-            img = big if px == S else big.resize((px, px), Image.LANCZOS)
+            if px == 16:
+                img = filled(flat, 15 / 16, px)
+            else:
+                img = big if px == S else big.resize((px, px), Image.LANCZOS)
             name = f'icon_{size}x{size}' + ('@2x' if scale == 2 else '') + '.png'
             img.save(os.path.join(out, name), optimize=True)
+            images.append({'idiom': 'mac', 'size': f'{size}x{size}', 'scale': f'{scale}x', 'filename': name})
+    with open(os.path.join(out, 'Contents.json'), 'w') as f:
+        json.dump({'images': images, **info}, f, indent=2)
     print(out)

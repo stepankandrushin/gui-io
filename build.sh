@@ -52,10 +52,28 @@ trap 'rm -rf $stage' EXIT
 app=$stage/GuiIO.app
 mkdir -p $app/Contents/MacOS $app/Contents/Resources
 cp Info.plist $app/Contents/Info.plist
-# icon/AppIcon.iconset is drawn by icon/icon.py
-iconutil -c icns -o $app/Contents/Resources/AppIcon.icns icon/AppIcon.iconset
+# the icon, drawn by icon/icon.py: an asset catalog, compiled by Xcode's actool (Xcode.app when the
+# selected developer directory is the Command Line Tools), else a plain .icns, which macOS 26 and later
+# draw on a gray tile at 16 and 32 px
+xcode=()
+if [[ -z ${DEVELOPER_DIR-} ]] && ! xcrun --find actool >/dev/null 2>&1 &&
+    [[ -d /Applications/Xcode.app/Contents/Developer ]]; then
+  xcode=(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer)
+fi
+if env $xcode xcrun --find actool >/dev/null 2>&1; then
+  env $xcode xcrun actool icon/Assets.xcassets --compile $app/Contents/Resources --platform macosx \
+    --minimum-deployment-target 14.0 --app-icon AppIcon --output-partial-info-plist $stage/icon.plist \
+    </dev/null >/dev/null
+  [[ -e $app/Contents/Resources/Assets.car ]] || { print -u2 "build.sh: actool made no Assets.car"; exit 1; }
+  $plistbuddy -c 'Add :CFBundleIconName string AppIcon' $app/Contents/Info.plist
+else
+  print "build.sh: no actool (Xcode), so the icon is a plain .icns"
+  mkdir $stage/AppIcon.iconset
+  cp icon/Assets.xcassets/AppIcon.appiconset/*.png $stage/AppIcon.iconset/
+  iconutil -c icns -o $app/Contents/Resources/AppIcon.icns $stage/AppIcon.iconset
+fi
 commit=$(git rev-parse --short HEAD 2>/dev/null || print none)
-[[ -z $(git status --porcelain -- gui-io.swift Info.plist icon/AppIcon.iconset 2>/dev/null) ]] || commit+=-dirty
+[[ -z $(git status --porcelain -- gui-io.swift Info.plist icon 2>/dev/null) ]] || commit+=-dirty
 $plistbuddy -c "Set :CFBundleIdentifier $label" -c "Set :CFBundleVersion $(date +%Y%m%d.%H%M%S)" \
   -c "Add :GuiIOCommit string $commit" $app/Contents/Info.plist
 
