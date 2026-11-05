@@ -21,7 +21,12 @@ cd ${0:A:h}
 plistbuddy=/usr/libexec/PlistBuddy
 apps=$HOME/Applications
 dest=$apps/GuiIO.app
-installed=$($plistbuddy -c 'Print :CFBundleIdentifier' $dest/Contents/Info.plist 2>/dev/null || true)
+# PlistBuddy answers a missing file with "File Doesn't Exist, Will Create" on stdout, so ask only
+# when there is one
+installed=
+if [[ -e $dest/Contents/Info.plist ]]; then
+  installed=$($plistbuddy -c 'Print :CFBundleIdentifier' $dest/Contents/Info.plist 2>/dev/null || true)
+fi
 label=${GUI_IO_ID:-${installed:-$($plistbuddy -c 'Print :CFBundleIdentifier' Info.plist)}}
 if [[ ! $label =~ '^[A-Za-z0-9.-]+$' ]]; then
   print -u2 "build.sh: $label is not a bundle id (letters, digits, dots and hyphens)"
