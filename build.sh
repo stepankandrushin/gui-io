@@ -50,10 +50,12 @@ mkdir -p $apps $HOME/.local/bin $HOME/Library/LaunchAgents $HOME/Library/Logs
 stage=$(mktemp -d $apps/.GuiIO-build.XXXXXX)
 trap 'rm -rf $stage' EXIT
 app=$stage/GuiIO.app
-mkdir -p $app/Contents/MacOS
+mkdir -p $app/Contents/MacOS $app/Contents/Resources
 cp Info.plist $app/Contents/Info.plist
+# icon/AppIcon.iconset is drawn by icon/icon.py
+iconutil -c icns -o $app/Contents/Resources/AppIcon.icns icon/AppIcon.iconset
 commit=$(git rev-parse --short HEAD 2>/dev/null || print none)
-[[ -z $(git status --porcelain -- gui-io.swift Info.plist 2>/dev/null) ]] || commit+=-dirty
+[[ -z $(git status --porcelain -- gui-io.swift Info.plist icon/AppIcon.iconset 2>/dev/null) ]] || commit+=-dirty
 $plistbuddy -c "Set :CFBundleIdentifier $label" -c "Set :CFBundleVersion $(date +%Y%m%d.%H%M%S)" \
   -c "Add :GuiIOCommit string $commit" $app/Contents/Info.plist
 

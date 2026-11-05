@@ -6,6 +6,7 @@
 	<key>CFBundleName</key><string>GuiIO</string>
 	<key>CFBundleDisplayName</key><string>GuiIO</string>
 	<key>CFBundleExecutable</key><string>gui-io</string>
+	<key>CFBundleIconFile</key><string>AppIcon</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
 	<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
 	<key>CFBundleShortVersionString</key><string>1.0</string>

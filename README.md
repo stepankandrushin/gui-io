@@ -334,6 +334,9 @@ tccutil reset All $id
 
 - `gui-io.swift`: the daemon, in one file (ScreenCaptureKit, CGEvent, ImageIO).
 - `Info.plist`: the bundle, with LSUIElement set, so there is no Dock icon and no menu.
+- `icon/`: `icon.py` draws the app icon into `AppIcon.iconset` (pycairo and Pillow), which `build.sh`
+  turns into `AppIcon.icns` with `iconutil`: a display folded like a page, a shell prompt and the
+  pointer, so the Screen Recording and Accessibility lists show what is asking.
 - `launchagent.plist`: the LaunchAgent template (RunAtLoad, KeepAlive, Aqua session).
 - `build.sh`: builds, signs, installs and (re)starts the app, and installs the client.
 - `gui`: the client, a zsh script.
